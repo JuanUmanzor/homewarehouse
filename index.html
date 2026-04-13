@@ -270,12 +270,13 @@ var _useEffect   = React.useEffect;
 var _useRef      = React.useRef;
 var _useCallback = React.useCallback;
 
-/* ── SUPABASE ──────────────────────────────────────── */
-var SB_URL = ‘https://vuftiaqztbobgujfeqth.supabase.co’;
-var SB_KEY = ‘eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1ZnRpYXF6dGJvYmd1amZlcXRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMjY2MDAsImV4cCI6MjA5MTYwMjYwMH0.ZMkybYz161OdP-VvydYg-x4E7MqJSVPKPuK1zsd3-14’;
-var createClient = window.supabase && window.supabase.createClient;
-if (!createClient) throw new Error(‘Supabase failed to load’);
-var sb = createClient(SB_URL, SB_KEY);
+/* ── SUPABASE ─────────────────────────────────── */
+const SB_URL = 'https://vuftiaqztbobgujfeqth.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1ZnRpYXF6dGJvYmd1amZlcXRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMjY2MDAsImV4cCI6MjA5MTYwMjYwMH0.ZMkybYz161OdP-VvydYg-x4E7MqJSVPKPuK1zsd3-14';
+
+const createClient = window.supabase?.createClient;
+if (!createClient) throw new Error("Supabase failed to load");
+const sb = createClient(SB_URL, SB_KEY);
 
 /* ── SHELF LOGIC ───────────────────────────────────── */
 // Your exact garage layout:
