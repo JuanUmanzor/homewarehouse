@@ -1,113 +1,215 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>HomeBase Inventory</title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HomeBase — Fixed</title>
 
-<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-<script src="https://unpkg.com/@supabase/supabase-js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 
 <style>
-body { font-family: Arial; margin:0; background:#0b0f14; color:white; }
-.hdr { padding:12px; background:#111826; position:sticky; top:0; }
-.logo em { color:#4da3ff; font-style:normal; }
-.card { background:#151c28; margin:10px; padding:10px; border-radius:10px; }
-.low { border:1px solid orange; }
-.out { border:1px solid red; }
-.cimg img { width:100%; border-radius:8px; }
-button { cursor:pointer; }
-.overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; justify-content:center; align-items:center; }
-.sheet { background:#111826; padding:20px; width:90%; max-width:500px; border-radius:10px; }
-.btn-primary { background:#4da3ff; color:white; padding:10px; border:none; border-radius:8px; }
-.btn-danger { background:#ff4d4d; color:white; padding:10px; border:none; border-radius:8px; }
+body { font-family: Arial; margin:0; background:#f5f5f5;}
+.container { max-width:700px; margin:auto; padding:20px;}
+.card { background:#fff; padding:12px; margin-bottom:10px; border-radius:8px; border:1px solid #ddd;}
+button { padding:8px 12px; margin-top:6px;}
+.error { color:red;}
+.top { display:flex; justify-content:space-between; align-items:center;}
 </style>
 </head>
 
 <body>
 <div id="root"></div>
 
-<script>
-/* ── SUPABASE ───────────────────────── */
-var SB_URL = "https://vuftiaqztbobgujfeqth.supabase.co";
-var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1ZnRpYXF6dGJvYmd1amZlcXRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMjY2MDAsImV4cCI6MjA5MTYwMjYwMH0.ZMkybYz161OdP-VvydYg-x4E7MqJSVPKPuK1zsd3-14";
-var sb = supabase.createClient(SB_URL, SB_KEY);
+<script type="text/babel">
 
-/* ── HELPERS ───────────────────────── */
-function stockLabel(s){
-  if(s==="out") return "OUT";
-  if(s==="low") return "LOW";
-  return "OK";
+const { useState, useEffect } = React;
+
+/* ================= SUPABASE SAFE INIT ================= */
+
+const SB_URL = "https://vuftiaqztbobgujfeqth.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1ZnRpYXF6dGJvYmd1amZlcXRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMjY2MDAsImV4cCI6MjA5MTYwMjYwMH0.ZMkybYz161OdP-VvydYg-x4E7MqJSVPKPuK1zsd3-14"; // 🔴 PUT YOUR KEY
+
+function initSupabase() {
+  try {
+    if (!window.supabase || !window.supabase.createClient) {
+      console.error("❌ Supabase not loaded");
+      return null;
+    }
+    return window.supabase.createClient(SB_URL, SB_KEY);
+  } catch (e) {
+    console.error("❌ Supabase init failed", e);
+    return null;
+  }
 }
 
-function stockStatus(qty, t){
-  if(qty<=0) return "out";
-  if(qty<=t) return "low";
-  return "ok";
+const sb = initSupabase();
+
+/* ================= NORMALIZE DATA ================= */
+
+function normalizeItem(raw) {
+  if (!raw) return null;
+
+  return {
+    id: raw.id || Math.random(),
+    name: raw.name || raw.item_name || "Unnamed",
+    quantity: Number(raw.quantity ?? raw.qty ?? 0),
+    category: raw.category || "Other",
+    location: raw.location || "",
+    note: raw.note || ""
+  };
 }
 
-function getVal(obj,key,def){
-  return obj && obj[key] !== undefined ? obj[key] : def;
-}
+/* ================= APP ================= */
 
-/* ── ITEM CARD ─────────────────────── */
-function ItemCard(p){
-  var item=p.item;
-  var s=stockStatus(item.quantity,item.low_threshold||2);
+function App() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  return React.createElement("div",{className:"card "+s},
-    React.createElement("div",null,
-      item.name
-    ),
-    React.createElement("div",null,"Qty: "+item.quantity),
-    React.createElement("button",{onClick:p.onPlus},"+"),
-    React.createElement("button",{onClick:p.onMinus},"-")
-  );
-}
+  /* LOAD ITEMS */
+  async function load() {
+    if (!sb) {
+      setError("Database not initialized");
+      setLoading(false);
+      return;
+    }
 
-/* ── APP ───────────────────────────── */
-function App(){
-  var state = React.useState([]);
-  var items = state[0];
-  var setItems = state[1];
+    setLoading(true);
+    setError("");
 
-  React.useEffect(function(){
-    load();
-  },[]);
+    try {
+      const { data, error } = await sb
+        .from("items")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-  async function load(){
-    var {data} = await sb.from("items").select("*");
-    setItems(data||[]);
+      if (error) {
+        console.error(error);
+        setError(error.message);
+        setItems([]);
+      } else {
+        const clean = (data || [])
+          .map(normalizeItem)
+          .filter(Boolean);
+
+        setItems(clean);
+      }
+
+    } catch (e) {
+      console.error(e);
+      setError("Unexpected error");
+      setItems([]);
+    }
+
+    setLoading(false);
   }
 
-  async function updateQty(item,delta){
-    await sb.from("items")
-      .update({quantity:item.quantity+delta})
-      .eq("id",item.id);
-
+  useEffect(() => {
     load();
-  }
+  }, []);
 
-  return React.createElement("div",null,
-    React.createElement("div",{className:"hdr"},
-      React.createElement("h2",null,"HomeBase Inventory")
-    ),
+  /* ADD ITEM */
+  async function addItem() {
+    const name = prompt("Item name?");
+    if (!name) return;
 
-    items.map(function(it){
-      return React.createElement(ItemCard,{
-        key:it.id,
-        item:it,
-        onPlus:function(){updateQty(it,1)},
-        onMinus:function(){updateQty(it,-1)}
+    const qty = Number(prompt("Quantity?", "1")) || 0;
+
+    try {
+      await sb.from("items").insert({
+        name: name.trim(),
+        quantity: qty,
+        category: "Other"
       });
-    })
+
+      load();
+
+    } catch (e) {
+      alert("Insert failed");
+    }
+  }
+
+  /* DELETE */
+  async function remove(id) {
+    await sb.from("items").delete().eq("id", id);
+    load();
+  }
+
+  /* UPDATE QTY */
+  async function changeQty(item, delta) {
+    const newQty = Math.max(0, item.quantity + delta);
+
+    await sb
+      .from("items")
+      .update({ quantity: newQty })
+      .eq("id", item.id);
+
+    load();
+  }
+
+  /* ================= RENDER ================= */
+
+  if (loading) {
+    return <div className="container"><h2>Loading...</h2></div>;
+  }
+
+  if (error) {
+    return (
+      <div className="container">
+        <h3 className="error">Error</h3>
+        <p>{error}</p>
+        <button onClick={load}>Retry</button>
+      </div>
+    );
+  }
+
+  if (!items || items.length === 0) {
+    return (
+      <div className="container">
+        <h3>No items found</h3>
+        <p>
+          Check:
+          <br/>• RLS policy
+          <br/>• table name = items
+        </p>
+        <button onClick={load}>Reload</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container">
+      <div className="top">
+        <h2>HomeBase ({items.length})</h2>
+        <button onClick={addItem}>+ Add</button>
+      </div>
+
+      {(items || []).map(item => (
+        <div key={item.id} className="card">
+          <strong>{item.name}</strong>
+
+          <div>Qty: {item.quantity}</div>
+          <div>{item.category}</div>
+          {item.location && <div>📍 {item.location}</div>}
+          {item.note && <div>{item.note}</div>}
+
+          <div>
+            <button onClick={() => changeQty(item, -1)}>-</button>
+            <button onClick={() => changeQty(item, 1)}>+</button>
+            <button onClick={() => remove(item.id)}>Delete</button>
+          </div>
+        </div>
+      ))}
+
+    </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root"))
-.render(React.createElement(App));
-</script>
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 
+</script>
 </body>
 </html>
