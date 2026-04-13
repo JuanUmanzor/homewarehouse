@@ -7,75 +7,98 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
 <style>
-body { margin:0; font-family:sans-serif; background:#111; color:white; }
+body { margin:0; font-family:Arial; background:#f4f4f4; }
+.hdr { padding:15px; background:#111; color:white; font-weight:bold; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:10px; }
+.card { background:white; padding:10px; border-radius:10px; }
+.btn { padding:6px 10px; margin:2px; }
 </style>
 </head>
 
 <body>
 <div id="root"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-
 <script>
-/* 🔥 GLOBAL ERROR HANDLER (prevents black screen) */
 window.onerror = function (msg, url, line, col, error) {
   document.body.innerHTML =
     "<pre style='color:red;padding:20px;white-space:pre-wrap;'>" +
-    msg + "\n\n" + (error && error.stack ? error.stack : "") +
+    msg + "\n\n" + (error?.stack || "") +
     "</pre>";
 };
 </script>
 
 <script type="text/babel">
 
-/* ✅ SAFE SUPABASE INIT */
+/* ✅ SUPABASE FIX (your working version) */
 const SB_URL = 'https://vuftiaqztbobgujfeqth.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1ZnRpYXF6dGJvYmd1amZlcXRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMjY2MDAsImV4cCI6MjA5MTYwMjYwMH0.ZMkybYz161OdP-VvydYg-x4E7MqJSVPKPuK1zsd3-14';
 
 const createClient = window.supabase?.createClient;
-if (!createClient) {
-  throw new Error("Supabase failed to load");
-}
+if (!createClient) throw new Error("Supabase failed to load");
 const sb = createClient(SB_URL, SB_KEY);
 
-/* SIMPLE TEST APP FIRST */
+/* HELPERS */
+function stockStatus(q) {
+  if (q === 0) return "out";
+  if (q <= 2) return "low";
+  return "ok";
+}
+
+/* APP */
 function App() {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
 
-  React.useEffect(() => {
-    load();
-  }, []);
+  React.useEffect(() => { load(); }, []);
 
   async function load() {
     try {
       const res = await sb.from('items').select('*');
       if (res.error) throw res.error;
       setItems(res.data || []);
-    } catch (e) {
-      throw e;
     } finally {
       setLoading(false);
     }
   }
 
-  if (loading) return <h1 style={{padding:20}}>Loading...</h1>;
+  async function updateQty(id, delta) {
+    const item = items.find(i => i.id === id);
+    const newQty = Math.max(0, item.quantity + delta);
+
+    setItems(prev =>
+      prev.map(i => i.id === id ? { ...i, quantity: newQty } : i)
+    );
+
+    await sb.from('items').update({ quantity: newQty }).eq('id', id);
+  }
+
+  if (loading) return <h2 style={{padding:20}}>Loading...</h2>;
 
   return (
-    <div style={{padding:20}}>
-      <h1>HomeBase Inventory</h1>
-      {items.length === 0 ? (
-        <p>No items found</p>
-      ) : (
-        items.map(item => (
-          <div key={item.id} style={{marginBottom:10}}>
-            {item.name} — {item.quantity}
-          </div>
-        ))
-      )}
+    <div>
+      <div className="hdr">HomeBase Inventory</div>
+
+      <div className="grid">
+        {items.map(item => {
+          const status = stockStatus(item.quantity);
+
+          return (
+            <div className="card" key={item.id}>
+              <h3>{item.name}</h3>
+              <p>Qty: {item.quantity}</p>
+              <p>Status: {status}</p>
+
+              <button className="btn" onClick={() => updateQty(item.id, -1)}>−</button>
+              <button className="btn" onClick={() => updateQty(item.id, 1)}>+</button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
